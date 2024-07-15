@@ -7,11 +7,12 @@ Since the upstream servers will not see the real client IPs but the proxy,
 you can specify a list of IPs allowed to transfer (AXFR/IXFR).
 
 Example usage:
-        $ go run dns_reverse_proxy.go -address :53 \
-                -default 8.8.8.8:53 \
-                -route .example.com.=8.8.4.4:53 \
-                -route .example2.com.=8.8.4.4:53,1.1.1.1:53 \
-                -allow-transfer 1.2.3.4,::1
+
+	$ go run dns_reverse_proxy.go -address :53 \
+	        -default 8.8.8.8:53 \
+	        -route .example.com.=8.8.4.4:53 \
+	        -route .example2.com.=8.8.4.4:53,1.1.1.1:53 \
+	        -allow-transfer 1.2.3.4,::1
 
 A query for example.net or example.com will go to 8.8.8.8:53, the default.
 However, a query for subdomain.example.com will go to 8.8.4.4:53. -default
@@ -30,7 +31,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/miekg/dns"
 )
@@ -54,21 +54,11 @@ var (
 
 	routeLists flagStringList
 	routes     map[string][]string
-
-	allowTransfer = flag.String("allow-transfer", "",
-		"List of IPs allowed to transfer (AXFR/IXFR)")
-	transferIPs []string
 )
-
-func init() {
-	rand.Seed(time.Now().Unix())
-	flag.Var(&routeLists, "route", "List of routes where to send queries (domain=host:port,[host:port,...])")
-}
 
 func main() {
 	flag.Parse()
 
-	transferIPs = strings.Split(*allowTransfer, ",")
 	routes = make(map[string][]string)
 	for _, routeList := range routeLists {
 		s := strings.SplitN(routeList, "=", 2)
@@ -120,7 +110,7 @@ func validHostPort(s string) bool {
 }
 
 func route(w dns.ResponseWriter, req *dns.Msg) {
-	if len(req.Question) == 0 || !allowed(w, req) {
+	if len(req.Question) == 0 || !allowed(req) {
 		dns.HandleFailed(w, req)
 		return
 	}
@@ -155,17 +145,8 @@ func isTransfer(req *dns.Msg) bool {
 	return false
 }
 
-func allowed(w dns.ResponseWriter, req *dns.Msg) bool {
-	if !isTransfer(req) {
-		return true
-	}
-	remote, _, _ := net.SplitHostPort(w.RemoteAddr().String())
-	for _, ip := range transferIPs {
-		if ip == remote {
-			return true
-		}
-	}
-	return false
+func allowed(req *dns.Msg) bool {
+	return !isTransfer(req)
 }
 
 func proxy(addr string, w dns.ResponseWriter, req *dns.Msg) {
