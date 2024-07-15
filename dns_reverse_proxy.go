@@ -25,7 +25,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -35,47 +34,24 @@ import (
 	"github.com/miekg/dns"
 )
 
-type flagStringList []string
-
-func (i *flagStringList) String() string {
-	return fmt.Sprint(*i)
-}
-
-func (i *flagStringList) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
 var (
 	address = flag.String("address", ":53", "Address to listen to (TCP and UDP)")
 
 	defaultServer = flag.String("default", "",
 		"Default DNS server where to send queries if no route matched (host:port)")
 
-	routeLists flagStringList
-	routes     map[string][]string
+	routes map[string]string
 )
 
 func main() {
 	flag.Parse()
 
-	routes = make(map[string][]string)
-	for _, routeList := range routeLists {
-		s := strings.SplitN(routeList, "=", 2)
-		if len(s) != 2 || len(s[0]) == 0 || len(s[1]) == 0 {
-			log.Fatal("invalid -route, must be domain=host:port,[host:port,...]")
-		}
-		var backends []string
-		for _, backend := range strings.Split(s[1], ",") {
-			if !validHostPort(backend) {
-				log.Fatalf("invalid host:port for %v", backend)
-			}
-			backends = append(backends, backend)
-		}
-		if !strings.HasSuffix(s[0], ".") {
-			s[0] += "."
-		}
-		routes[strings.ToLower(s[0])] = backends
+	routes = make(map[string]string)
+
+	for i := 0; i <= 255; i++ {
+		backend := fmt.Sprintf("10.80.%d.255:53", i)
+		name := fmt.Sprintf("%d.member.orionet.re.", i)
+		routes[name] = backend
 	}
 
 	udpServer := &dns.Server{Addr: *address, Net: "udp"}
@@ -101,14 +77,6 @@ func main() {
 	tcpServer.Shutdown()
 }
 
-func validHostPort(s string) bool {
-	host, port, err := net.SplitHostPort(s)
-	if err != nil || host == "" || port == "" {
-		return false
-	}
-	return true
-}
-
 func route(w dns.ResponseWriter, req *dns.Msg) {
 	if len(req.Question) == 0 || !allowed(req) {
 		dns.HandleFailed(w, req)
@@ -117,11 +85,17 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 
 	lcName := strings.ToLower(req.Question[0].Name)
 	for name, addrs := range routes {
-		if strings.HasSuffix(lcName, name) {
-			addr := addrs[0]
-			if n := len(addrs); n > 1 {
-				addr = addrs[rand.Intn(n)]
+		// All DS records should be forwarded to the default server (which is the autoritative DNS server)
+		for _, q := range req.Question {
+			switch q.Qtype {
+			case dns.TypeIXFR, dns.TypeDS:
+				proxy(*defaultServer, w, req)
+				return
 			}
+		}
+
+		if strings.HasSuffix(lcName, name) {
+			addr := addrs
 			proxy(addr, w, req)
 			return
 		}
