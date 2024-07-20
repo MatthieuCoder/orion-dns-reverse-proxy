@@ -75,7 +75,8 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 			}
 		}
 
-		if strings.HasSuffix(lcName, name) {
+		// Check if the dns name in under
+		if strings.HasSuffix(lcName, fmt.Sprintf(".%s", name)) || lcName == name {
 			addr := addrs
 			proxy(addr, w, req)
 			return
