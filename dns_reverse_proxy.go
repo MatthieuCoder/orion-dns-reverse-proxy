@@ -28,7 +28,7 @@ func main() {
 	routes = make(map[string]string)
 
 	for i := 0; i <= 255; i++ {
-		backend := fmt.Sprintf("10.80.%d.255:53", i)
+		backend := fmt.Sprintf("10.30.%d.255:53", i)
 		name := fmt.Sprintf("%d.orionet.re.", i)
 		reverse := fmt.Sprintf("%d.30.10.in-addr.arpa.", i)
 		routes[name] = backend
