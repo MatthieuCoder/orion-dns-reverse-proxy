@@ -113,6 +113,7 @@ func proxy(addr string, w dns.ResponseWriter, req *dns.Msg) {
 	resp, _, err := c.Exchange(req, addr)
 	if err != nil {
 		dns.HandleFailed(w, req)
+		fmt.Printf("Error while proxying %s", err.Error())
 		return
 	}
 	w.WriteMsg(resp)
