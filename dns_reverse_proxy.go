@@ -29,8 +29,10 @@ func main() {
 
 	for i := 0; i <= 255; i++ {
 		backend := fmt.Sprintf("10.80.%d.255:53", i)
-		name := fmt.Sprintf("%d.member.orionet.re.", i)
+		name := fmt.Sprintf("%d.orionet.re.", i)
+		reverse := fmt.Sprintf("%d.30.10.in-addr.arpa.", i)
 		routes[name] = backend
+		routes[reverse] = backend
 	}
 
 	udpServer := &dns.Server{Addr: *address, Net: "udp"}
