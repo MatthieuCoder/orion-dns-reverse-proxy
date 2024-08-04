@@ -86,6 +86,10 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 						return
 					}
 
+					rrMailServer4, _ := dns.NewRR("mail.orionet.re. IN A 194.163.144.50")
+					rrMailServer6, _ := dns.NewRR("mail.orionet.re. IN AAAA 2a02:c206:2201:3371::1")
+					m.Extra = append(m.Extra, rrMailServer4, rrMailServer6)
+
 					m.Answer = append(m.Answer, rr)
 
 					w.WriteMsg(m)
