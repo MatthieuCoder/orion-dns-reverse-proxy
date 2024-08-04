@@ -18,6 +18,8 @@ var (
 
 	defaultServer = flag.String("default", "",
 		"Default DNS server where to send queries if no route matched (host:port)")
+	mxRecords = flag.String("mx-records", "",
+		"Default DNS server where to send queries if no route matched (host:port)")
 
 	routes map[string]string
 )
@@ -72,11 +74,6 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 			case dns.TypeIXFR, dns.TypeDS:
 				proxy(*defaultServer, w, req)
 				return
-			case dns.TypeMX:
-				if lcName == name {
-					proxy(*defaultServer, w, req)
-					return
-				}
 			}
 		}
 
