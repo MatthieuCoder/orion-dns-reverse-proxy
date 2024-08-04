@@ -74,6 +74,22 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 			case dns.TypeIXFR, dns.TypeDS:
 				proxy(*defaultServer, w, req)
 				return
+			case dns.TypeMX:
+				if name == lcName {
+					m := new(dns.Msg)
+					m.SetReply(req)
+					m.Compress = false
+					rr, err := dns.NewRR(fmt.Sprintf("%s IN MX 10 mail.orionet.re", lcName))
+
+					if err != nil {
+						dns.HandleFailed(w, req)
+						return
+					}
+
+					m.Answer = append(m.Answer, rr)
+
+					w.WriteMsg(m)
+				}
 			}
 		}
 
