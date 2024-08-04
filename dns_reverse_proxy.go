@@ -69,12 +69,15 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 		// All DS records should be forwarded to the default server (which is the autoritative DNS server)
 		for _, q := range req.Question {
 			switch q.Qtype {
-			case dns.TypeIXFR, dns.TypeDS, dns.TypeMX:
+			case dns.TypeIXFR, dns.TypeDS:
 				proxy(*defaultServer, w, req)
 				return
-
+			case dns.TypeMX:
+				if lcName == name {
+					proxy(*defaultServer, w, req)
+					return
+				}
 			}
-
 		}
 
 		// Check if the dns name in under
