@@ -93,7 +93,7 @@ func loadKeys() []*RRSetKey {
 			re := regexp.MustCompile(`K([^\+])+\+[^\+]+\+(\d+)\.private`)
 			match := re.FindStringSubmatch(name)
 			id, err := strconv.Atoi(match[2])
-			signerName := match[1]
+			signerName := "orionet.re."
 
 			if err != nil {
 				panic(err)
@@ -161,7 +161,7 @@ func rrSign(rr *[]dns.RR, key *RRSetKey) error {
 		KeyTag:     key.Tag,
 		SignerName: key.SignerName,
 		Algorithm:  dns.ECDSAP384SHA384,
-		Inception:  uint32(time.Now().Unix()),
+		Inception:  uint32(time.Now().Add(-time.Hour * 7).Unix()),
 		Expiration: (uint32(time.Now().Add(time.Hour * 24 * 7).Unix())),
 	}
 	err := sig.Sign(key.PrivateKey, *rr)
@@ -210,6 +210,7 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 					rrMailServer6, _ := dns.NewRR("mail.orionet.re. IN AAAA 2a02:c206:2201:3371::1")
 					m.Extra = append(m.Extra, rrMailServer4, rrMailServer6)
 					m.Answer = append(m.Answer, rr)
+					m.Authoritative = true
 
 					signRRSet(m)
 
