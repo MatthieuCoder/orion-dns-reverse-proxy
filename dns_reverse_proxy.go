@@ -42,6 +42,8 @@ type PrivateKeyFile struct {
 }
 
 func loadPrivate(path string) (*RRSetKey, error) {
+	fmt.Printf("Loading %s", path)
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -75,6 +77,7 @@ type RRSetKey struct {
 }
 
 func loadKeys() []*RRSetKey {
+	log.Println("Starting to load the certificates...")
 	keys := []*RRSetKey{}
 
 	files, err := os.ReadDir(*certificatesDir)
@@ -108,11 +111,12 @@ func loadKeys() []*RRSetKey {
 }
 
 var (
-	Keys = loadKeys()
+	Keys []*RRSetKey
 )
 
 func main() {
 	flag.Parse()
+	Keys = loadKeys()
 
 	routes = make(map[string]string)
 
@@ -122,6 +126,7 @@ func main() {
 		reverse := fmt.Sprintf("%d.30.10.in-addr.arpa.", i)
 		routes[name] = backend
 		routes[reverse] = backend
+		log.Printf("Adding %s for %s and %s", backend, name, reverse)
 	}
 
 	udpServer := &dns.Server{Addr: *address, Net: "udp"}
@@ -137,6 +142,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
+
+	log.Println("Server is loaded.")
 
 	// Wait for SIGINT or SIGTERM
 	sigs := make(chan os.Signal, 1)
