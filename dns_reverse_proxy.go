@@ -77,9 +77,9 @@ type RRSetKey struct {
 	Activate   int
 }
 
-func loadKeys() []*RRSetKey {
+func loadKeys() map[string]*RRSetKey {
 	log.Println("Starting to load the certificates...")
-	keys := []*RRSetKey{}
+	keys := make(map[string]*RRSetKey)
 
 	files, err := os.ReadDir(*certificatesDir)
 
@@ -90,10 +90,10 @@ func loadKeys() []*RRSetKey {
 	for _, file := range files {
 		name := filepath.Join(*certificatesDir, file.Name())
 		if strings.HasSuffix(name, ".private") {
-			re := regexp.MustCompile(`K([^\+])+\+[^\+]+\+(\d+)\.private`)
+			re := regexp.MustCompile(`/K([^\+]*)\+[^\+]+\+(\d+)\.private`)
 			match := re.FindStringSubmatch(name)
 			id, err := strconv.Atoi(match[2])
-			signerName := "orionet.re."
+			signerName := match[1]
 
 			if err != nil {
 				panic(err)
@@ -104,7 +104,7 @@ func loadKeys() []*RRSetKey {
 			}
 			key.SignerName = signerName
 			key.Tag = uint16(id)
-			keys = append(keys, key)
+			keys[signerName] = key
 		}
 	}
 
@@ -112,7 +112,7 @@ func loadKeys() []*RRSetKey {
 }
 
 var (
-	Keys []*RRSetKey
+	Keys map[string]*RRSetKey
 )
 
 func main() {
@@ -172,12 +172,10 @@ func rrSign(rr *[]dns.RR, key *RRSetKey) error {
 	return nil
 }
 
-func signRRSet(rrset *dns.Msg) {
-	for _, key := range Keys {
-		rrSign(&rrset.Extra, key)
-		rrSign(&rrset.Answer, key)
-	}
-
+func signRRSet(rrset *dns.Msg, lc string) {
+	key := Keys[lc]
+	rrSign(&rrset.Extra, key)
+	rrSign(&rrset.Answer, key)
 }
 
 func route(w dns.ResponseWriter, req *dns.Msg) {
@@ -212,7 +210,7 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 					m.Answer = append(m.Answer, rr)
 					m.Authoritative = true
 
-					signRRSet(m)
+					signRRSet(m, lcName)
 
 					w.WriteMsg(m)
 				}
