@@ -228,6 +228,34 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 					w.WriteMsg(msg)
 					return
 				}
+			case dns.TypeRRSIG:
+				if strings.HasSuffix(lcName, fmt.Sprintf(".%s", name)) || lcName == name {
+					fmt.Println("handling RRSIG Request")
+					client := &dns.Client{Net: "tcp"}
+					dial, _ := client.Dial(addrs)
+					err := dial.WriteMsg(&dns.Msg{
+						Question: req.Question,
+					})
+					if err != nil {
+						fmt.Printf(err.Error())
+						return
+					}
+					defer dial.Close()
+					msg, err := dial.ReadMsg()
+					if err != nil {
+						fmt.Printf(err.Error())
+						return
+					}
+					fmt.Printf("%s\n", msg.Answer)
+					fmt.Printf("%s\n", Keys[lcName].DNSKEYRR)
+					msg.Answer = append(msg.Answer, Keys[lcName].DNSKEYRR)
+					msg.SetReply(req)
+
+					signRRSet(msg, lcName)
+
+					w.WriteMsg(msg)
+					return
+				}
 			case dns.TypeMX:
 				if name == lcName {
 					m := new(dns.Msg)
