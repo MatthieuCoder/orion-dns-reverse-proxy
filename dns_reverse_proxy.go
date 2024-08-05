@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	address = flag.String("address", ":553", "Address to listen to (TCP and UDP)")
+	address = flag.String("address", ":53", "Address to listen to (TCP and UDP)")
 
 	defaultServer = flag.String("default", "",
 		"Default DNS server where to send queries if no route matched (host:port)")
