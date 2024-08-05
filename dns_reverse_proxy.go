@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ type PrivateKeyFile struct {
 }
 
 func loadPrivate(path string) (*RRSetKey, error) {
-	fmt.Printf("Loading %s", path)
+	fmt.Printf("Loading %s\n", path)
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -87,7 +88,7 @@ func loadKeys() []*RRSetKey {
 	}
 
 	for _, file := range files {
-		name := file.Name()
+		name := filepath.Join(*certificatesDir, file.Name())
 		if strings.HasSuffix(name, ".private") {
 			re := regexp.MustCompile(`K([^\+])+\+[^\+]+\+(\d+)\.private`)
 			match := re.FindStringSubmatch(name)
