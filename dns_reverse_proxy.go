@@ -251,7 +251,7 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 					msg.Answer = append(msg.Answer, Keys[lcName].DNSKEYRR)
 					msg.SetReply(req)
 
-					signRRSet(msg, lcName)
+					rrSign(&msg.Answer, Keys[lcName])
 
 					w.WriteMsg(msg)
 					return
