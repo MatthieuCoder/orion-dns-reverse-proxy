@@ -1,27 +1,114 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/miekg/dns"
+
+	"gopkg.in/yaml.v3"
 )
 
 var (
-	address = flag.String("address", ":53", "Address to listen to (TCP and UDP)")
+	address = flag.String("address", ":553", "Address to listen to (TCP and UDP)")
 
 	defaultServer = flag.String("default", "",
 		"Default DNS server where to send queries if no route matched (host:port)")
-	mxRecords = flag.String("mx-records", "",
+	certificatesDir = flag.String("certs", "./",
 		"Default DNS server where to send queries if no route matched (host:port)")
 
 	routes map[string]string
+)
+
+type PrivateKeyFile struct {
+	Algorithm  string
+	PrivateKey string
+	Created    int64
+	Publish    int64
+	Activate   int64
+}
+
+func loadPrivate(path string) (*RRSetKey, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	out := new(PrivateKeyFile)
+	err = yaml.Unmarshal(content, &out)
+	if err != nil {
+		return nil, err
+	}
+	dst := []byte{}
+	_, err = base64.StdEncoding.Decode(dst, []byte(out.PrivateKey))
+	if err != nil {
+		panic(err)
+	}
+	p := new(ecdsa.PrivateKey)
+	p.D = new(big.Int)
+	p.D.SetBytes(dst)
+	p.Curve = elliptic.P384()
+
+	return &RRSetKey{
+		PrivateKey: p,
+		Activate:   int(out.Activate),
+	}, nil
+}
+
+type RRSetKey struct {
+	Tag        uint16
+	PrivateKey *ecdsa.PrivateKey
+	SignerName string
+	Activate   int
+}
+
+func loadKeys() []*RRSetKey {
+	keys := []*RRSetKey{}
+
+	files, err := os.ReadDir(*certificatesDir)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+		name := file.Name()
+		if strings.HasSuffix(name, ".private") {
+			re := regexp.MustCompile(`K([^\+])+\+[^\+]+\+(\d+)\.private`)
+			match := re.FindStringSubmatch(name)
+			id, err := strconv.Atoi(match[2])
+			signerName := match[1]
+
+			if err != nil {
+				panic(err)
+			}
+			key, err := loadPrivate(name)
+			if err != nil {
+				panic(err)
+			}
+			key.SignerName = signerName
+			key.Tag = uint16(id)
+			keys = append(keys, key)
+		}
+	}
+
+	return keys
+}
+
+var (
+	Keys = loadKeys()
 )
 
 func main() {
@@ -60,6 +147,31 @@ func main() {
 	tcpServer.Shutdown()
 }
 
+func rrSign(rr *[]dns.RR, key *RRSetKey) error {
+	// nception, Expiration, KeyTag, SignerName and Algorithm
+	sig := &dns.RRSIG{
+		KeyTag:     key.Tag,
+		SignerName: key.SignerName,
+		Algorithm:  dns.ECDSAP384SHA384,
+		Inception:  uint32(time.Now().Unix()),
+		Expiration: (uint32(time.Now().Add(time.Hour * 24 * 7).Unix())),
+	}
+	err := sig.Sign(key.PrivateKey, *rr)
+	if err != nil {
+		return err
+	}
+	*rr = append(*rr, sig)
+	return nil
+}
+
+func signRRSet(rrset *dns.Msg) {
+	for _, key := range Keys {
+		rrSign(&rrset.Extra, key)
+		rrSign(&rrset.Answer, key)
+	}
+
+}
+
 func route(w dns.ResponseWriter, req *dns.Msg) {
 	if len(req.Question) == 0 || !allowed(req) {
 		dns.HandleFailed(w, req)
@@ -89,8 +201,9 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 					rrMailServer4, _ := dns.NewRR("mail.orionet.re. IN A 194.163.144.50")
 					rrMailServer6, _ := dns.NewRR("mail.orionet.re. IN AAAA 2a02:c206:2201:3371::1")
 					m.Extra = append(m.Extra, rrMailServer4, rrMailServer6)
-
 					m.Answer = append(m.Answer, rr)
+
+					signRRSet(m)
 
 					w.WriteMsg(m)
 				}
