@@ -75,6 +75,7 @@ type RRSetKey struct {
 	PrivateKey *ecdsa.PrivateKey
 	SignerName string
 	Activate   int
+	DNSKEYRR   dns.RR
 }
 
 func loadKeys() map[string]*RRSetKey {
@@ -104,6 +105,16 @@ func loadKeys() map[string]*RRSetKey {
 			}
 			key.SignerName = signerName
 			key.Tag = uint16(id)
+			file, err := os.ReadFile(strings.Replace(name, ".private", ".key", 1))
+			if err != nil {
+				panic(err)
+			}
+			set, err := dns.NewRR(string(file))
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("%s", set.String())
+			key.DNSKEYRR = set
 			keys[signerName] = key
 		}
 	}
@@ -192,6 +203,31 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 			case dns.TypeIXFR, dns.TypeDS:
 				proxy(*defaultServer, w, req)
 				return
+			case dns.TypeDNSKEY:
+				if strings.HasSuffix(lcName, fmt.Sprintf(".%s", name)) || lcName == name {
+					fmt.Println("handling dnskey")
+					client := &dns.Client{Net: "tcp"}
+					dial, _ := client.Dial(addrs)
+					err := dial.WriteMsg(&dns.Msg{
+						Question: req.Question,
+					})
+					if err != nil {
+						fmt.Printf(err.Error())
+						return
+					}
+					defer dial.Close()
+					msg, err := dial.ReadMsg()
+					if err != nil {
+						fmt.Printf(err.Error())
+						return
+					}
+					fmt.Printf("%s\n", msg.Answer)
+					fmt.Printf("%s\n", Keys[lcName].DNSKEYRR)
+					msg.Answer = append(msg.Answer, Keys[lcName].DNSKEYRR)
+					msg.SetReply(req)
+					w.WriteMsg(msg)
+					return
+				}
 			case dns.TypeMX:
 				if name == lcName {
 					m := new(dns.Msg)
